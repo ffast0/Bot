@@ -62,8 +62,7 @@ const replies = {
 
 // ===== MESSAGELARNI HANDLER QILISH =====
 bot.on("message", (msg) => {
-  if (msg.text.startsWith("/")) return;
-
+  if (!msg.text) return; // text bo‘lmasa chiq
   const text = msg.text;
 
   if (["Salom"].includes(text)) {
