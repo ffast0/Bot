@@ -1,9 +1,13 @@
 import express from "express";
 import dotenv from "dotenv";
 import TelegramBot from "node-telegram-bot-api";
+dotenv.config();
 
 const token = process.env.TOKEN_API;
 const bot = new TelegramBot(token);
+
+const app = express(); // <== EXPRESS SERVER
+app.use(express.json());
 
 // ===== RAMAZON VA REPLIES =====
 const ramazonTimes = {
