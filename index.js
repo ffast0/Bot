@@ -161,17 +161,14 @@ bot.on("message", (msg) => {
 });
 
 // ===== VERCEL SERVERLESS HANDLER =====
-export default async function handler(req, res) {
-  if (req.method === "POST") {
-    bot.processUpdate(req.body);
-    if (req.body.message) handleMsg(req.body.message);
-    return res.status(200).send("ok");
-  }
-
-  return res.status(200).send("Ramazon bot ishlayapti!");
-}
-
 // ===== UTILITY =====
 function random(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
+
+// ===== EXPRESS SERVER (faqat status) =====
+app.get("/", (req,res)=>{
+  res.send("Ramazon bot ishlayapti!");
+});
+
+app.listen(process.env.PORT || 3000, ()=>console.log("Server ishlayapti..."));
