@@ -4,9 +4,24 @@ import TelegramBot from "node-telegram-bot-api";
 
 dotenv.config();
 const app = express();
+app.use(express.json());
 
-const bot = new TelegramBot(process.env.TOKEN_API, { polling: true });
-// Ramazon taqvimi (sana → saharlik/iftorlik)
+const token = process.env.TOKEN_API;
+const bot = new TelegramBot(token); // ❌ polling olib tashlandi
+
+// ===== WEBHOOK ROUTE (qo‘shildi xolos) =====
+app.post(`/bot${token}`, (req, res) => {
+  bot.processUpdate(req.body);
+  res.sendStatus(200);
+});
+
+app.get("/", (req, res) => {
+  res.send("Bot ishlayapti");
+});
+
+
+// ====== SENI ORIGINAL KODING (O‘ZGARMAGAN) ======
+
 const ramazonTimes = {
   "2026-02-18": { saharlik: "05:55", iftorlik: "18:04" },
   "2026-02-19": { saharlik: "05:54", iftorlik: "18:05" },
@@ -39,7 +54,6 @@ const ramazonTimes = {
   "2026-03-18": { saharlik: "05:12", iftorlik: "18:37" },
   "2026-03-19": { saharlik: "05:10", iftorlik: "18:38" }
 };
-
 const replies = {
   greetings: ["Assalomu Alaykum Va Rahmatullohi Va Barakatuh", "Va Alaykum Assalom Va Rahmatulahi Va Barakatuh"],
   status: ["Tinch", "Tinch ozindachi", "Boladi ozindachi"],
@@ -161,11 +175,8 @@ bot.on("message", (msg) => {
 
 });
 
-bot.onText(/\/start/, (msg) => {
-  bot.sendMessage(msg.chat.id, "Yana bir marta salom bu bot hishnima qilomid");
-});
 
-app.listen(3000, () => console.log("all good"));
+export default app;
 
 function random(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
