@@ -1,7 +1,10 @@
 import TelegramBot from "node-telegram-bot-api";
 import dbConnect from "../lib/mongodb.js";
+import dotenv from "dotenv";
+dotenv.config();
 
 const bot = new TelegramBot(process.env.TOKEN_API);
+
 const ramazonTimes = {
   "2026-02-18": { saharlik: "05:55", iftorlik: "18:04" },
   "2026-02-19": { saharlik: "05:54", iftorlik: "18:05" },
@@ -320,14 +323,14 @@ await Message.create({
 });
 
 
-
-
-
 export default async function handler(req, res) {
   await dbConnect();
+
   if (req.method === "POST") {
     bot.processUpdate(req.body);
     return res.status(200).send("ok");
   }
+
+  // GET uchun ishlaydi, test uchun
   res.status(200).send("Bot ishlayapti");
 }
