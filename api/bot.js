@@ -6,7 +6,7 @@ import dbConnect from "../lib/mongodb.js";
 dotenv.config();
 
 const token = process.env.TOKEN_API;
-const bot = new TelegramBot(token);
+const bot = new TelegramBot(token, { webHook: true });
 
 const app = express(); 
 app.use(cors());
