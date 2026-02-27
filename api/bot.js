@@ -13,7 +13,7 @@ app.use(cors());
 app.use(express.json());
 
 
-app.post("/bot", (req, res) => {
+app.post("/api/bot", (req, res) => {
   bot.processUpdate(req.body);
   res.sendStatus(200);
 })
