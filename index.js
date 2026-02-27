@@ -1,24 +1,27 @@
 import express from "express";
 import dotenv from "dotenv";
 import TelegramBot from "node-telegram-bot-api";
-import mongoose from "mongoose";
 import cors from "cors";
-app.use(cors());
-
+import dbConnect from "./lib/mongodb.js";
 dotenv.config();
 
 const token = process.env.TOKEN_API;
 const bot = new TelegramBot(token);
 
 const app = express(); 
+app.use(cors());
 app.use(express.json());
+
+
 app.post("/bot", (req, res) => {
   bot.processUpdate(req.body);
   res.sendStatus(200);
-});
-mongoose.connect(process.env.MONGO_URL)
-  .then(() => console.log("MongoDB ulandi ✅"))
-  .catch(err => console.log("MongoDB xato ❌", err));
+})
+
+dbConnect()
+  .then(() => console.log("MongoDB ulanishi ✅"))
+  .catch((err) => console.log("MongoDB xato ❌", err));
+
 const ramazonTimes = {
   "2026-02-18": { saharlik: "05:55", iftorlik: "18:04" },
   "2026-02-19": { saharlik: "05:54", iftorlik: "18:05" },
@@ -75,17 +78,7 @@ const replies = {
   av:["Agar 2 snf bosa urib sokib tashiman!","Pul omiman"],
   h:["Labe","H?","Nima?"]
 };
-const messageSchema = new mongoose.Schema({
-  user: String,
-  username: String,
-  chatId: Number,
-  text: String,
-  type: String,
-  date: String,
-  time: String
-}, { timestamps: true });
 
-const Message = mongoose.model("Message", messageSchema);
 bot.on("message", (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text;
@@ -300,6 +293,7 @@ Agar boshqa narsa yozsangiz, javob bermasligim mumkin 🙂
   }
 }
 })
+
 bot.on("message",async (msg) => {
 
   const messageDate = new Date(msg.date * 1000); // sekund → millisekund
@@ -347,15 +341,13 @@ await Message.create({
 
 
 
-function random(arr) {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
+app.get("/", async (req, res) => {
+  try {
+    await dbConnect();
+    res.send("Bot va MongoDB ishlayapti ✅");
+  } catch (err) {
+    res.status(500).send("Xatolik yuz berdi ❌");
+  }
+});
 
-app.get("/", (req,res)=>{
-  res.send("Ramazon bot ishlayapti!");
-});
-app.get("/messages", async (req, res) => {
-  const data = await Message.find().sort({ createdAt: -1 }).limit(100);
-  res.json(data);
-});
 export default app;
