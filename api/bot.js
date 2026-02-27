@@ -2,7 +2,7 @@ import express from "express";
 import dotenv from "dotenv";
 import TelegramBot from "node-telegram-bot-api";
 import cors from "cors";
-import dbConnect from "./lib/mongodb.js";
+import dbConnect from "../lib/mongodb.js";
 dotenv.config();
 
 const token = process.env.TOKEN_API;
@@ -341,13 +341,15 @@ await Message.create({
 
 
 
-app.get("/", async (req, res) => {
-  try {
-    await dbConnect();
-    res.send("Bot va MongoDB ishlayapti ✅");
-  } catch (err) {
-    res.status(500).send("Xatolik yuz berdi ❌");
-  }
-});
 
-export default app;
+
+export default async function handler(req, res) {
+  await dbConnect();
+
+  if (req.method === "POST") {
+    bot.processUpdate(req.body);
+    return res.status(200).send("ok");
+  }
+
+  res.status(200).send("Bot ishlayapti");
+}
