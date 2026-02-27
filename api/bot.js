@@ -1,27 +1,7 @@
-import express from "express";
-import dotenv from "dotenv";
 import TelegramBot from "node-telegram-bot-api";
-import cors from "cors";
 import dbConnect from "../lib/mongodb.js";
-dotenv.config();
 
-const token = process.env.TOKEN_API;
-const bot = new TelegramBot(token, { webHook: true });
-
-const app = express(); 
-app.use(cors());
-app.use(express.json());
-
-
-app.post("/api/bot", (req, res) => {
-  bot.processUpdate(req.body);
-  res.sendStatus(200);
-})
-
-dbConnect()
-  .then(() => console.log("MongoDB ulanishi ✅"))
-  .catch((err) => console.log("MongoDB xato ❌", err));
-
+const bot = new TelegramBot(process.env.TOKEN_API);
 const ramazonTimes = {
   "2026-02-18": { saharlik: "05:55", iftorlik: "18:04" },
   "2026-02-19": { saharlik: "05:54", iftorlik: "18:05" },
@@ -345,11 +325,9 @@ await Message.create({
 
 export default async function handler(req, res) {
   await dbConnect();
-
   if (req.method === "POST") {
     bot.processUpdate(req.body);
     return res.status(200).send("ok");
   }
-
   res.status(200).send("Bot ishlayapti");
 }
