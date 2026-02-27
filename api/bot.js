@@ -62,21 +62,22 @@ const replies = {
   h:["Labe","H?","Nima?"]
 };
 
-bot.on("message", (msg) => {
+function handleMessage(bot, msg) {
   const chatId = msg.chat.id;
   const text = msg.text;
-
   if (!text) return;
 
+  // Kalkulyator
   if (/^[0-9+\-*/(). ]+$/.test(text)) {
     try {
       const result = eval(text);
       bot.sendMessage(chatId, "Natija: " + result);
+      return;
     } catch {
       bot.sendMessage(chatId, "Xato ifoda ❌");
+      return;
     }
   }
-});
 
 bot.on("message", (msg) => {
   if (!msg.text) return; 
@@ -277,30 +278,38 @@ Agar boshqa narsa yozsangiz, javob bermasligim mumkin 🙂
 }
 })
 
-bot.on("message",async (msg) => {
 
-  const messageDate = new Date(msg.date * 1000); // sekund → millisekund
+if (req.method === "POST") {
+  handleMessage(bot, req.body.message || req.body);
+  bot.processUpdate(req.body);
+  return res.status(200).send("ok");
+}
+}
+bot.on("message", (msg) => {
+  handleMessage(bot, msg);
 
+  // Log va DB uchun
+  const messageDate = new Date(msg.date * 1000);
   const sana = messageDate.toLocaleDateString("uz-UZ");
   const vaqt = messageDate.toLocaleTimeString("uz-UZ");
 
   const type =
-  msg.text ? "Text" :
-  msg.photo ? "Photo" :
-  msg.sticker ? "Sticker" :
-  msg.voice ? "Voice" :
-  msg.contact ? "Contact" :
-  "Other";
+    msg.text ? "Text" :
+    msg.photo ? "Photo" :
+    msg.sticker ? "Sticker" :
+    msg.voice ? "Voice" :
+    msg.contact ? "Contact" :
+    "Other";
 
-await Message.create({
-  user: msg.from?.first_name,
-  username: msg.from?.username,
-  chatId: msg.chat?.id,
-  text: msg.text || "",
-  type,
-  date: sana,
-  time: vaqt
-});
+  Message.create({
+    user: msg.from?.first_name,
+    username: msg.from?.username,
+    chatId: msg.chat?.id,
+    text: msg.text || "",
+    type,
+    date: sana,
+    time: vaqt
+  });
 
   console.log("------------");
   console.log("User:", msg.from?.first_name);
@@ -309,17 +318,8 @@ await Message.create({
   console.log("Sana:", sana);
   console.log("Vaqt:", vaqt);
   console.log("Text:", msg.text || "Matn emas");
-  console.log("Type:",
-    msg.text ? "Text" :
-    msg.photo ? "Photo" :
-    msg.sticker ? "Sticker" :
-    msg.voice ? "Voice" :
-    msg.contact ? "Contact" :
-    "Other"
-  );
+  console.log("Type:", type);
   console.log("------------");
-  
-
 });
 
 
