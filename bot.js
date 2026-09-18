@@ -83,9 +83,65 @@ const modifyPointsByIdOrUsername = async (identifier, amount) => {
 let userGames = {};
 let gameTimers = {};
 
+const random = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
 const getMention = (user) => {
   const safeName = (user.first_name || "Foydalanuvchi").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   return `<a href="tg://user?id=${user.id}">${safeName}</a>`;
+};
+
+const safeDeleteMessage = async (chatId, messageId) => {
+  try {
+    if (messageId) await bot.deleteMessage(chatId, messageId);
+  } catch (e) {
+    // Xabarni o'chirib bo'lmasa xatolikni inkor etamiz
+  }
+};
+
+const createXOBoard = (board) => {
+  const keyboard = [];
+  for (let i = 0; i < 3; i++) {
+    const row = [];
+    for (let j = 0; j < 3; j++) {
+      const index = i * 3 + j;
+      const val = board[index];
+      row.push({
+        text: val ? val : " ",
+        callback_data: `xo_${index}`
+      });
+    }
+    keyboard.push(row);
+  }
+  return { inline_keyboard: keyboard };
+};
+
+const checkXOWinner = (board) => {
+  const winPatterns = [
+    [0, 1, 2], [3, 4, 5], [6, 7, 8], // Satrlar
+    [0, 3, 6], [1, 4, 7], [2, 5, 8], // Ustunlar
+    [0, 4, 8], [2, 4, 6]             // Diagonallar
+  ];
+
+  for (const [a, b, c] of winPatterns) {
+    if (board[a] && board[a] === board[b] && board[a] === board[c]) {
+      return board[a];
+    }
+  }
+
+  if (board.every((cell) => cell !== null)) {
+    return "draw";
+  }
+
+  return null;
+};
+
+const getBestBotMove = (board) => {
+  const emptyIndices = board
+    .map((val, idx) => (val === null ? idx : null))
+    .filter((val) => val !== null);
+
+  if (emptyIndices.length === 0) return null;
+  return random(emptyIndices);
 };
 
 // ==================== BOT HANDLERS ====================
@@ -126,7 +182,132 @@ bot.on("message", async (msg) => {
       );
       return;
     }
-    
+
+    const match = trimmedText.match(/^([+-]\d+)\s+(@?\w+)$/);
+    if (match) {
+      const amount = parseInt(match[1], 10);
+      const targetIdentifier = match[2];
+      const updatedUser = await modifyPointsByIdOrUsername(targetIdentifier, amount);
+
+      if (updatedUser) {
+        const actionText = amount >= 0 ? `+${amount} ball qo'shildi` : `${amount} ball ayirildi`;
+        const displayName = updatedUser.username ? updatedUser.username : updatedUser.firstName;
+        bot.sendMessage(
+          chatId,
+          `✅ <b>${displayName}</b> hisobiga ${actionText}! (Jami: ${updatedUser.numWins})`,
+          { parse_mode: "HTML", reply_to_message_id: msg.message_id }
+        );
+      } else {
+        bot.sendMessage(chatId, `❌ Foydalanuvchi bazadan topilmadi!`, {
+          reply_to_message_id: msg.message_id
+        });
+      }
+      return;
+    }
+  }
+
+  // Lichkada yashirin sonni qabul qilish
+  if (msg.chat.type === "private") {
+    let activeGameChatId = Object.keys(userGames).find((cId) => {
+      const g = userGames[cId];
+      return (
+        g?.type === "num_pvp_setup" &&
+        (g.player1.id === userId || g.player2.id === userId)
+      );
+    });
+
+    if (activeGameChatId) {
+      const game = userGames[activeGameChatId];
+      const val = parseInt(text);
+
+      if (isNaN(val) || val < 1 || val > 100) {
+        bot.sendMessage(chatId, "❌ Xato! Iltimos, 1 dan 100 gacha bo'lgan faqat son kiriting:");
+        return;
+      }
+
+      if (game.player1.id === userId) game.player1.secret = val;
+      if (game.player2.id === userId) game.player2.secret = val;
+
+      bot.sendMessage(chatId, `✅ Soningiz (${val}) muvaffaqiyatli saqlandi!`);
+
+      if (game.player1.secret !== null && game.player2.secret !== null) {
+        game.type = "num_pvp_active";
+        game.turn = game.player1.id;
+
+        bot.sendMessage(
+          activeGameChatId,
+          `🎮 <b>1vs1 Son Topish O'yini Boshlandi!</b>\n\n` +
+          `👥 ${getMention(game.player1.raw)} va ${getMention(game.player2.raw)} o'z sonlarini yashirishdi!\n\n` +
+          `🎯 Navbat: ${getMention(game.player1.raw)}`,
+          { parse_mode: "HTML" }
+        );
+      }
+      return;
+    }
+  }
+
+  if (!text) return;
+
+  // Statistika / Reyting
+  if (["Statistika", "statistika", "Reyting", "reyting", "Top", "top"].includes(text)) {
+    try {
+      const topUsers = await UserStats.find({ numWins: { $gt: 0 } })
+        .sort({ numWins: -1 })
+        .limit(10);
+
+      if (topUsers.length === 0) {
+        bot.sendMessage(chatId, "🏆 Hali hech kim g'olib bo'lmagan!");
+        return;
+      }
+
+      let leaderboardMsg = `🏆 <b>Eng Kuchli O'yinchilar:</b>\n\n`;
+      topUsers.forEach((u, index) => {
+        const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : "👤";
+        const userDisplay = u.username ? u.username : u.firstName;
+        leaderboardMsg += `${medal} <b>${index + 1}. ${userDisplay}</b> — <code>${u.numWins}</code> ta g'alaba\n`;
+      });
+
+      bot.sendMessage(chatId, leaderboardMsg, { parse_mode: "HTML" });
+      return;
+    } catch (e) {
+      bot.sendMessage(chatId, "Statistikani olishda xatolik yuz berdi.");
+      return;
+    }
+  }
+
+  // Atmen & Udalit
+  if (["Atmen", "atmen"].includes(text)) {
+    if (userGames[chatId]) {
+      delete userGames[chatId];
+      bot.sendMessage(chatId, "🚫 Ketayotgan o'yin bekor qilindi!");
+    } else {
+      bot.sendMessage(chatId, "Hozirda hech qanday faol o'yin yo'q.");
+    }
+    return;
+  }
+
+  if (["Udalit", "udalit"].includes(text)) {
+    userGames = {};
+    gameTimers = {};
+    bot.sendMessage(chatId, "🗑 Barcha o'yinlar tozalandi!");
+    return;
+  }
+
+  // O'yinlar Menyusi
+  if (["Oyinla", "Oyinlar", "O'yinlar", "Oyin"].includes(text)) {
+    bot.sendMessage(chatId, "🎮 Qaysi o'yinni o'ynamoqchisiz?", {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "❌/⭕️ X/O O'yini", callback_data: "select_xo_mode" }],
+          [{ text: "🪨✂️📄 Tosh-Qog'oz-Qaychi", callback_data: "select_rps_mode" }],
+          [{ text: "🔢 Son topish (1-100)", callback_data: "select_num_mode" }]
+        ]
+      }
+    });
+    return;
+  }
+});
+
 bot.on("callback_query", async (query) => {
   const chatId = query.message?.chat?.id || query.from.id;
   const messageId = query.message?.message_id;
@@ -330,7 +511,6 @@ bot.on("callback_query", async (query) => {
 
     bot.answerCallbackQuery(query.id, { text: "Tanlovingiz saqlandi!" });
 
-    // Ikkala o'yinchi ham tanlab bo'ldimi?
     if (game.player1.choice && game.player2.choice) {
       delete userGames[chatId];
       const p1C = game.player1.choice;
@@ -658,130 +838,6 @@ bot.on("callback_query", async (query) => {
       }
       bot.answerCallbackQuery(query.id);
     }
-  }
-});
-
-    const match = trimmedText.match(/^([+-]\d+)\s+(@?\w+)$/);
-    if (match) {
-      const amount = parseInt(match[1], 10);
-      const targetIdentifier = match[2];
-      const updatedUser = await modifyPointsByIdOrUsername(targetIdentifier, amount);
-
-      if (updatedUser) {
-        const actionText = amount >= 0 ? `+${amount} ball qo'shildi` : `${amount} ball ayirildi`;
-        const displayName = updatedUser.username ? updatedUser.username : updatedUser.firstName;
-        bot.sendMessage(
-          chatId,
-          `✅ <b>${displayName}</b> hisobiga ${actionText}! (Jami: ${updatedUser.numWins})`,
-          { parse_mode: "HTML", reply_to_message_id: msg.message_id }
-        );
-      } else {
-        bot.sendMessage(chatId, `❌ Foydalanuvchi bazadan topilmadi!`, {
-          reply_to_message_id: msg.message_id
-        });
-      }
-      return;
-    }
-  }
-
-  // Lichkada yashirin sonni qabul qilish
-  if (msg.chat.type === "private") {
-    let activeGameChatId = Object.keys(userGames).find((cId) => {
-      const g = userGames[cId];
-      return (
-        g?.type === "num_pvp_setup" &&
-        (g.player1.id === userId || g.player2.id === userId)
-      );
-    });
-
-    if (activeGameChatId) {
-      const game = userGames[activeGameChatId];
-      const val = parseInt(text);
-
-      if (isNaN(val) || val < 1 || val > 100) {
-        bot.sendMessage(chatId, "❌ Xato! Iltimos, 1 dan 100 gacha bo'lgan faqat son kiriting:");
-        return;
-      }
-
-      if (game.player1.id === userId) game.player1.secret = val;
-      if (game.player2.id === userId) game.player2.secret = val;
-
-      bot.sendMessage(chatId, `✅ Soningiz (${val}) muvaffaqiyatli saqlandi!`);
-
-      if (game.player1.secret !== null && game.player2.secret !== null) {
-        game.type = "num_pvp_active";
-        game.turn = game.player1.id;
-
-        bot.sendMessage(
-          activeGameChatId,
-          `🎮 <b>1vs1 Son Topish O'yini Boshlandi!</b>\n\n` +
-          `👥 ${getMention(game.player1.raw)} va ${getMention(game.player2.raw)} o'z sonlarini yashirishdi!\n\n` +
-          `🎯 Navbat: ${getMention(game.player1.raw)}`,
-          { parse_mode: "HTML" }
-        );
-      }
-      return;
-    }
-  }
-
-  if (!text) return;
-
-  // Statistika / Reyting
-  if (["Statistika", "statistika", "Reyting", "reyting", "Top", "top"].includes(text)) {
-    try {
-      const topUsers = await UserStats.find({ numWins: { $gt: 0 } })
-        .sort({ numWins: -1 })
-        .limit(10);
-
-      if (topUsers.length === 0) {
-        bot.sendMessage(chatId, "🏆 Hali hech kim g'olib bo'lmagan!");
-        return;
-      }
-
-      let leaderboardMsg = `🏆 <b>Eng Kuchli O'yinchilar:</b>\n\n`;
-      topUsers.forEach((u, index) => {
-        const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : "👤";
-        const userDisplay = u.username ? u.username : u.firstName;
-        leaderboardMsg += `${medal} <b>${index + 1}. ${userDisplay}</b> — <code>${u.numWins}</code> ta g'alaba\n`;
-      });
-
-      bot.sendMessage(chatId, leaderboardMsg, { parse_mode: "HTML" });
-      return;
-    } catch (e) {
-      bot.sendMessage(chatId, "Statistikani olishda xatolik yuz berdi.");
-      return;
-    }
-  }
-
-  // Atmen & Udalit
-  if (["Atmen", "atmen"].includes(text)) {
-    if (userGames[chatId]) {
-      delete userGames[chatId];
-      bot.sendMessage(chatId, "🚫 Ketayotgan o'yin bekor qilindi!");
-    } else {
-      bot.sendMessage(chatId, "Hozirda hech qanday faol o'yin yo'q.");
-    }
-    return;
-  }
-
-  if (["Udalit", "udalit"].includes(text)) {
-    userGames = {};
-    gameTimers = {};
-    bot.sendMessage(chatId, "🗑 Barcha o'yinlar tozalandi!");
-    return;
-  }
-
-  // O'yinlar Menyusi
-  if (["Oyinla", "Oyinlar", "O'yinlar", "Oyin"].includes(text)) {
-    bot.sendMessage(chatId, "🎮 Qaysi o'yinni o'ynamoqchisiz?", {
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "❌/⭕️ X/O O'yini", callback_data: "select_xo_mode" }],
-          [{ text: "🔢 Son topish (1-100)", callback_data: "select_num_mode" }]
-        ]
-      }
-    });
-    return;
   }
 });
 
